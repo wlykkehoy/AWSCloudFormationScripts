@@ -1,0 +1,202 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	
+	"Resources" : {
+		"ClassVPC" : {
+			"Type" : "AWS::EC2::VPC",
+			"Properties" : {
+				"EnableDnsSupport" : true,
+				"EnableDnsHostnames" : true,
+				"CidrBlock" : "10.0.0.0/16",
+				"Tags" : [
+					{ "Key" : "Name", "Value" : "ClassVPC" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"InternetGateway": {
+			"Type": "AWS::EC2::InternetGateway",
+			"Properties": {
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "InternetGateway" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+        "InternetGatewayToVPCAttachment": {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+                "InternetGatewayId" : { "Ref" : "InternetGateway" },
+                "VpcId" : { "Ref" : "ClassVPC" }
+            }
+        },					
+		"PublicSubnet1" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref": "ClassVPC" },
+				"CidrBlock" : "10.0.0.0/24",
+				"AvailabilityZone" : "us-east-1a",
+				"MapPublicIpOnLaunch" : true,				
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicSubnet1" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicSubnet2" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref": "ClassVPC" },
+				"CidrBlock" : "10.0.1.0/24",
+				"AvailabilityZone" : "us-east-1b",
+				"MapPublicIpOnLaunch" : true,				
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicSubnet2" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicRouteTable" : {
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref": "ClassVPC" },
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicRouteTable" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicRoute" : {
+			"Type" : "AWS::EC2::Route",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"DestinationCidrBlock" : "0.0.0.0/0",
+				"GatewayId" : { "Ref": "InternetGateway" }
+			}
+		},
+		"publicSubnet1RTassoc" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"SubnetId" : { "Ref": "PublicSubnet1" }
+			}
+		},
+		"publicSubnet2RTassoc" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"SubnetId" : { "Ref": "PublicSubnet2" }
+			}
+		},
+		"WebServerSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"VpcId": { "Ref": "ClassVPC" },
+				"GroupDescription": "Allow access from HTTP and SSH traffic",
+				"SecurityGroupIngress": [
+					{ "IpProtocol" : "tcp", "FromPort" : 22, "ToPort" : 22, "CidrIp" : "24.118.160.56/32" },
+					{ "IpProtocol" : "tcp", "FromPort" : 80, "ToPort" : 80, "CidrIp" : "0.0.0.0/0" } 
+				]
+			}
+		},
+		"LoadBalancerSG" : {
+			"Type" : "AWS::EC2::SecurityGroup",
+			"Properties" : {
+				"GroupDescription" : "Only allow hppt; from anywhere",
+				"VpcId" : {"Ref" : "ClassVPC"},
+				"SecurityGroupIngress" : [ 
+					{ "IpProtocol" : "tcp", "FromPort" : 80, "ToPort" : 80, "CidrIp" : "0.0.0.0/0" } 
+				],
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "LoadBalancerSG" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]				
+			}
+		},
+		"LoadBalancer" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+			"Properties" : {
+				"Scheme" : "internet-facing",
+				"Subnets" : [ 
+					{ "Ref" : "PublicSubnet1" }, 
+					{ "Ref" : "PublicSubnet2" }
+				],
+				"SecurityGroups" : [
+					{ "Ref": "LoadBalancerSG" }
+				],
+				"Tags" : [
+					{ "Key" : "Name", "Value" : "LoadBalancer" },
+					{ "Key" : "Stack", "Value" : { "Ref": "AWS::StackName" } }
+				]
+			}
+		},
+		"LBTargetGroup" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+			"Properties" : {
+				"Name" : "LBTargetGroup",
+				"VpcId" : { "Ref": "ClassVPC" },
+				"Protocol" : "HTTP",
+				"Port" : 80,				
+				"HealthCheckPath" : "/",				
+				"Tags" : [
+					{ "Key" : "Name", "Value" : "LBTargetGroup" },
+					{ "Key" : "Stack", "Value" : { "Ref": "AWS::StackName" } }
+				]
+			}
+		},
+		"LBListener" : {
+			"Type" : "AWS::ElasticLoadBalancingV2::Listener",
+			"Properties" : {
+				"DefaultActions" : [
+					{ "Type" : "forward", "TargetGroupArn" : { "Ref" : "LBTargetGroup" } }
+				],
+				"LoadBalancerArn" : { "Ref" : "LoadBalancer" },
+				"Port" : 80,
+				"Protocol" : "HTTP"
+			}
+		},
+		"WebServerLaunchConfig" : {
+			"Type" : "AWS::AutoScaling::LaunchConfiguration",
+			"Properties" : {
+				"InstanceType": "t2.micro",
+				"ImageId": "ami-3ea13f29",
+				"KeyName" : "SEIS665-AWSEC2-VA",
+				"SecurityGroups" : [ 
+					{ "Ref" : "WebServerSecurityGroup" } 
+				]			
+			}
+		},
+		"WebServerAutoScalingGroup" : {
+			"Type" : "AWS::AutoScaling::AutoScalingGroup",
+			"Properties" : {
+				"LaunchConfigurationName" : { "Ref" : "WebServerLaunchConfig" },
+				"VPCZoneIdentifier" : [ 
+					{ "Ref" : "PublicSubnet1" },
+					{ "Ref" : "PublicSubnet2" }
+				],
+				"TargetGroupARNs" : [ 
+					{ "Ref" : "LBTargetGroup" } 
+				],		
+				"MinSize" : "2",
+				"MaxSize" : "10",
+				"DesiredCapacity" : "4",
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "WebServerAutoScalingGroup", "PropagateAtLaunch" : true },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } , "PropagateAtLaunch" : true }
+				]
+			}
+		}
+ 	},	
+	
+	"Outputs": {
+		"weburl1": {
+			"Description": "Webserver URL",
+			"Value": {
+				"Fn::Join": [
+					"",
+					[ "http://", { "Fn::GetAtt": [ "LoadBalancer", "DNSName" ] } ]
+				]
+			}
+		}
+	}
+}

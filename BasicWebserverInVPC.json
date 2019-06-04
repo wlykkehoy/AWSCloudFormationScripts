@@ -1,0 +1,134 @@
+{
+	"AWSTemplateFormatVersion": "2010-09-09",
+	
+	"Resources" : {
+		"classVpc" : {
+			"Type" : "AWS::EC2::VPC",
+			"Properties" : {
+				"EnableDnsSupport" : true,
+				"EnableDnsHostnames" : true,
+				"CidrBlock" : "10.0.0.0/16",
+				"Tags" : [
+					{ "Key" : "Name", "Value" : "classVpc" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"InternetGateway": {
+			"Type": "AWS::EC2::InternetGateway",
+			"Properties": {
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "InternetGateway" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+        "InternetGatewayToVPCAttachment": {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+                "InternetGatewayId" : { "Ref" : "InternetGateway" },
+                "VpcId" : { "Ref" : "classVpc" }
+            }
+        },					
+		"PublicSubnet1" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref": "classVpc" },
+				"CidrBlock" : "10.0.0.0/24",
+				"AvailabilityZone" : "us-east-1a",
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicSubnet1" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicSubnet2" : {
+			"Type" : "AWS::EC2::Subnet",
+			"Properties" : {
+				"VpcId" : { "Ref": "classVpc" },
+				"CidrBlock" : "10.0.1.0/24",
+				"AvailabilityZone" : "us-east-1b",
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicSubnet2" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicRouteTable" : {
+			"Type" : "AWS::EC2::RouteTable",
+			"Properties" : {
+				"VpcId" : { "Ref": "classVpc" },
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "PublicRouteTable" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		},
+		"PublicRoute" : {
+			"Type" : "AWS::EC2::Route",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"DestinationCidrBlock" : "0.0.0.0/0",
+				"GatewayId" : { "Ref": "InternetGateway" }
+			}
+		},
+		"publicSubnet1RTassoc" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"SubnetId" : { "Ref": "PublicSubnet1" }
+			}
+		},
+		"publicSubnet2RTassoc" : {
+			"Type" : "AWS::EC2::SubnetRouteTableAssociation",
+			"Properties" : {
+				"RouteTableId" : { "Ref": "PublicRouteTable" },
+				"SubnetId" : { "Ref": "PublicSubnet2" }
+			}
+		},
+		"WebServerSecurityGroup": {
+			"Type": "AWS::EC2::SecurityGroup",
+			"Properties": {
+				"VpcId": { "Ref": "classVpc" },
+				"GroupDescription": "Allow access from HTTP and SSH traffic",
+				"SecurityGroupIngress": [
+					{ "IpProtocol" : "tcp", "FromPort" : 22, "ToPort" : 22, "CidrIp" : "24.118.160.56/32" },
+					{ "IpProtocol" : "tcp", "FromPort" : 80, "ToPort" : 80, "CidrIp" : "0.0.0.0/0" } 
+				]
+			}
+		},
+		"WebServer1": {
+			"Type": "AWS::EC2::Instance",
+			"Properties": {
+				"InstanceType": "t2.micro",
+				"ImageId": "ami-3ea13f29",
+				"KeyName" : { "Ref" : "KeyPair" },					
+				"NetworkInterfaces": [
+					{
+						"GroupSet": [ { "Ref": "WebServerSecurityGroup" } ],
+						"AssociatePublicIpAddress": true,
+						"DeviceIndex": "0",
+						"DeleteOnTermination": true,
+						"SubnetId": { "Ref": "PublicSubnet1" }
+					}
+				],
+				"Tags" : [ 
+					{ "Key" : "Name", "Value" : "WebServer1" },
+					{ "Key" : "Stack", "Value" : { "Ref" : "AWS::StackName" } }
+				]
+			}
+		}
+ 	},	
+	
+	"Outputs": {
+		"weburl1": {
+			"Description": "Webserver URL",
+			"Value": {
+				"Fn::Join": [
+					"",
+					[ "http://", { "Fn::GetAtt": [ "WebServer1", "PublicIp" ] } ]
+				]
+			}
+		}
+	}
+}
